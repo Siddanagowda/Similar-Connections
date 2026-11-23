@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: ai-prospect-discovery
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: HOST
+        value: 0.0.0.0
+      - key: DEFAULT_LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: SERPAPI_API_KEY
+        sync: false
