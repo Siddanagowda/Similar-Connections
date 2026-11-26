@@ -89,7 +89,7 @@ flowchart TD
 3. **Multi-Source Waterfall Discovery**: Executes search queries across all platform targets concurrently via waterfall fallback (Tavily &rarr; SerpAPI &rarr; Live Web Search).
 4. **Evidence & Provenance Tracking**: `EvidenceService` captures original snippets, matched keywords, and discovery source URLs for each candidate.
 5. **Contact Discovery & Validation**: `ContactService` parses verified public emails, phone numbers, and WhatsApp links; validates phone numbers to E.164 standard via `phonenumbers` and emails via `email-validator`.
-6. **Relevance Scoring**: Weighted relevance engine evaluates interest match (50%), location match (35%), and audience match (15%). Contact presence is not used as a relevance signal.
+6. **Relevance Scoring**: Weighted relevance engine evaluates interest match (50%), location match (35%), and audience match (15%), with evidence gates requiring the requested geography and audience persona before a candidate is accepted. Contact presence is not used as a relevance signal.
 7. **Entity Resolution & Deduplication**: `IdentityService` consolidates records belonging to the same individual using multi-factor identity matching: shared verified contacts, cross-platform username equality, fuzzy name matching with location alignment, and common name protections.
 
 ---
@@ -702,7 +702,7 @@ The project includes a ready-to-deploy [`render.yaml`](render.yaml) file:
 |---|:---:|---|:---:|
 | **Natural Language Query Understanding** | 15 | Gemini LLM intent extraction with structured hierarchy (`interest`, `audience`, `city`, `state`, `country`, `target_type`) + heuristic fallback | Implemented |
 | **Multi-Platform Discovery Implementation** | 25 | Modular adapters for Google, LinkedIn, X, YouTube, Instagram, Facebook, Threads, WhatsApp, Email with independent error handling | Implemented |
-| **Prospect Relevance & Accuracy** | 15 | Weighted scoring algorithm (50% interest, 35% location, 15% audience/persona); configurable relevance threshold | Implemented |
+| **Prospect Relevance & Accuracy** | 15 | Weighted scoring algorithm (50% interest, 35% location, 15% audience/persona) plus hard location/persona evidence gates; configurable relevance threshold | Implemented |
 | **Duplicate Detection & Consolidation** | 10 | RapidFuzz entity resolution (`token_sort_ratio`, `token_set_ratio`, handle matching) consolidating multiple social links | Implemented |
 | **Public Profile & Contact Validation** | 10 | `phonenumbers` E.164 standardization, `email-validator` syntax check, strict platform URL regex, disallow generic feeds/search URLs | Implemented |
 | **Structured JSON Output & API Design** | 10 | Pydantic response validation, POST `/prospect-discovery` on port 4000, OpenAPI Swagger docs at `/docs` | Implemented |
