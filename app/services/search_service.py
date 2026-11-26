@@ -25,6 +25,8 @@ class SearchService:
         self.adapters: List[BasePlatformAdapter] = get_all_platform_adapters()
         # Cloud-hosted search calls need more than a 1–2 second budget.
         self.timeout = max(8.0, float(settings.REQUEST_TIMEOUT_SECONDS))
+        # Limit concurrent live searches to reduce upstream throttling.
+        self._search_semaphore = asyncio.Semaphore(2)
 
     async def search_tavily(self, query: str, max_results: int = 5) -> List[dict]:
         """Tavily search API integration."""
@@ -121,17 +123,18 @@ class SearchService:
         Try configured search providers in order. Each provider is called directly;
         a failed provider falls through to the next one.
         """
-        if settings.TAVILY_API_KEY:
-            results = await self.search_tavily(query, max_results)
-            if results:
-                return results
+        async with self._search_semaphore:
+            if settings.TAVILY_API_KEY:
+                results = await self.search_tavily(query, max_results)
+                if results:
+                    return results
 
-        if settings.SERPAPI_API_KEY:
-            results = await self.search_serpapi(query, max_results)
-            if results:
-                return results
+            if settings.SERPAPI_API_KEY:
+                results = await self.search_serpapi(query, max_results)
+                if results:
+                    return results
 
-        return await self.search_live_web(query, max_results)
+            return await self.search_live_web(query, max_results)
 
     async def discover_candidates(self, intent: QueryIntent) -> List[RawProfileCandidate]:
         """
