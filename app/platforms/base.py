@@ -88,16 +88,22 @@ class BasePlatformAdapter(ABC):
             if norm_wa and norm_wa not in whatsapp_links:
                 whatsapp_links.append(norm_wa)
 
-        # Detect location from text or inherit query location if mentioned
+        # Only attach a location when the candidate's own title/snippet
+        # contains evidence for it. Do not copy the query location onto every
+        # result: that creates unsupported location claims and inflates scoring.
         detected_location = None
         if intent.location:
             loc_str = intent.location.to_formatted_string()
-            # If city or country is in snippet/title, associate location
-            if intent.location.city and intent.location.city.lower() in combined_text.lower():
-                detected_location = loc_str
-            elif intent.location.country and intent.location.country.lower() in combined_text.lower():
-                detected_location = loc_str
-            elif loc_str:
+            candidate_text = combined_text.lower()
+            city_match = (
+                intent.location.city
+                and intent.location.city.lower() in candidate_text
+            )
+            country_match = (
+                intent.location.country
+                and intent.location.country.lower() in candidate_text
+            )
+            if loc_str and (city_match or country_match):
                 detected_location = loc_str
 
         return RawProfileCandidate(
