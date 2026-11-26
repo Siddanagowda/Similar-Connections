@@ -131,7 +131,15 @@ class SearchService:
             if results:
                 return results
 
-        return await self.search_live_web(query, max_results)
+        if not settings.TAVILY_API_KEY and not settings.SERPAPI_API_KEY:
+            logger.warning(
+                "No paid search provider is configured; using DDGS fallback. "
+                "For reliable hosted discovery, configure TAVILY_API_KEY or SERPAPI_API_KEY."
+            )
+        results = await self.search_live_web(query, max_results)
+        if not results:
+            logger.warning("All configured search providers returned no results for query: %s", query)
+        return results
 
     async def discover_candidates(self, intent: QueryIntent) -> List[RawProfileCandidate]:
         """
