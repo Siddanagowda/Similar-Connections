@@ -109,7 +109,7 @@ flowchart TD
 | 9 | **Threads** | Public creator profiles | `threads.net/@<handle>` |
 
 > [!NOTE]
-> Per **Rule 79** of the assessment: Google is utilized as an indexed discovery source. The returned prospect records contain actual public platform links (`LinkedIn`, `X`, `Instagram`, etc.) or personal domains, never raw search engine result pages.
+> Per **Rule 79** of the assessment: Google is used as an indexed discovery source. The URL filters are designed to exclude generic search-result pages and retain profile-shaped URLs or personal domains. This URL-shape check does not independently confirm that a profile exists, belongs to the named person, or is currently accessible.
 
 ---
 
@@ -563,7 +563,9 @@ curl -X POST http://localhost:4000/prospect-discovery \
 
 ## 8. LLM Platform & Model Research (Cost, Speed, Accuracy)
 
-As required by Section 8 of the specification, we conducted an in-depth empirical and architectural research comparison across leading LLM providers to identify the most suitable engine for query understanding, search dork formulation, and prospect classification.
+As required by Section 8 of the specification, this section summarizes a comparative review of LLM providers for query understanding, search-query formulation, and prospect classification.
+
+> **Benchmark caveat:** Pricing, free-tier limits, context windows, and model availability change over time. Latency and accuracy figures below are indicative estimates, not results of a controlled benchmark performed by this application. Verify current provider pricing and availability before using these figures for a production cost estimate.
 
 ### A. Provider & Model Comparison Table
 
@@ -698,15 +700,15 @@ The project includes a ready-to-deploy [`render.yaml`](render.yaml) file:
 
 | Criteria | Maximum Marks | Implementation Evidence | Score Claimed |
 |---|:---:|---|:---:|
-| **Natural Language Query Understanding** | 15 | Gemini LLM intent extraction with structured hierarchy (`interest`, `audience`, `city`, `state`, `country`, `target_type`) + heuristic fallback | 15/15 |
-| **Multi-Platform Discovery Implementation** | 25 | Modular adapters for Google, LinkedIn, X, YouTube, Instagram, Facebook, Threads, WhatsApp, Email with independent error handling | 25/25 |
+| **Natural Language Query Understanding** | 15 | Gemini LLM intent extraction with structured hierarchy (`interest`, `audience`, `city`, `state`, `country`, `target_type`) + heuristic fallback | Implemented |
+| **Multi-Platform Discovery Implementation** | 25 | Modular adapters for Google, LinkedIn, X, YouTube, Instagram, Facebook, Threads, WhatsApp, Email with independent error handling | Implemented |
 | **Prospect Relevance & Accuracy** | 15 | Weighted scoring algorithm (50% interest, 35% location, 15% audience/persona); configurable relevance threshold | Implemented |
-| **Duplicate Detection & Consolidation** | 10 | RapidFuzz entity resolution (`token_sort_ratio`, `token_set_ratio`, handle matching) consolidating multiple social links | 10/10 |
-| **Public Profile & Contact Validation** | 10 | `phonenumbers` E.164 standardization, `email-validator` syntax check, strict platform URL regex, disallow generic feeds/search URLs | 10/10 |
-| **Structured JSON Output & API Design** | 10 | Pydantic response validation, POST `/prospect-discovery` on port 4000, OpenAPI Swagger docs at `/docs` | 10/10 |
-| **LLM Research & Cost Optimization** | 10 | Comprehensive comparison table (Gemini vs OpenAI vs Claude vs DeepSeek), token calculations per 1k requests, prompt optimization | 10/10 |
-| **Code Quality, Error Handling & Docs** | 5 | Clean architecture, type hints, logging, docstrings, Dockerfile, test suite (24/24 passed), complete README | 5/5 |
-| **Total** | **100** | Full compliance with test specification | **100 / 100** |
+| **Duplicate Detection & Consolidation** | 10 | RapidFuzz entity resolution (`token_sort_ratio`, `token_set_ratio`, handle matching) consolidating multiple social links | Implemented |
+| **Public Profile & Contact Validation** | 10 | `phonenumbers` E.164 standardization, `email-validator` syntax check, strict platform URL regex, disallow generic feeds/search URLs | Implemented |
+| **Structured JSON Output & API Design** | 10 | Pydantic response validation, POST `/prospect-discovery` on port 4000, OpenAPI Swagger docs at `/docs` | Implemented |
+| **LLM Research & Cost Optimization** | 10 | Provider comparison, token-cost calculations, prompt minimization, deterministic validation, and heuristic fallback | Implemented |
+| **Code Quality, Error Handling & Docs** | 5 | Modular architecture, type hints, logging, Dockerfile, test suite (24/24 passed), and README documentation | Implemented |
+| **Total** | **100** | Implementation evidence mapped against the assessment categories; final scoring is determined by the evaluator | — |
 
 ---
 
