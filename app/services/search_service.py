@@ -192,7 +192,7 @@ class SearchService:
         seen_urls = set()
         max_candidates = settings.MAX_SEARCH_RESULTS_PER_PLATFORM
 
-        for query in queries:
+        for query in queries[:3]:
             results = await self.search_waterfall(
                 query,
                 max_results=settings.MAX_SEARCH_RESULTS_PER_PLATFORM
@@ -214,11 +214,6 @@ class SearchService:
                     seen_urls.add(candidate.url)
 
             if len(candidates) >= max_candidates:
-                break
-
-            if candidates:
-                # One query produced usable profiles. Avoid unnecessary requests
-                # and search-provider rate limits.
                 break
 
         logger.info(
