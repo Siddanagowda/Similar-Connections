@@ -11,12 +11,13 @@ from app.schemas import QueryIntent, LocationDetail
 
 logger = logging.getLogger(__name__)
 
-# Try importing google.generativeai
-try:
-    import google.generativeai as genai
-    GENAI_AVAILABLE = True
-except ImportError:
-    GENAI_AVAILABLE = False
+def get_genai():
+    """Lazily load google.generativeai to prevent gRPC C-thread stalls on app import."""
+    try:
+        import google.generativeai as genai
+        return genai
+    except ImportError:
+        return None
 
 
 QUERY_UNDERSTANDING_SYSTEM_PROMPT = """You are an expert AI query parser for a multi-platform prospect discovery engine.
@@ -52,26 +53,38 @@ Output:
 """
 
 
+_online_cache = {"result": None, "timestamp": 0.0}
+
+
+def is_online(ttl: float = 5.0) -> bool:
+    """Fast check with 5s cache to verify outbound connectivity before attempting remote API calls."""
+    import time
+    now = time.time()
+    if _online_cache["result"] is not None and (now - _online_cache["timestamp"] < ttl):
+        return _online_cache["result"]
+    import socket
+    try:
+        s = socket.create_connection(("8.8.8.8", 53), timeout=0.3)
+        s.close()
+        _online_cache["result"] = True
+    except Exception:
+        _online_cache["result"] = False
+    _online_cache["timestamp"] = now
+    return _online_cache["result"]
+
+
 class LLMService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        self.model_name = settings.GEMINI_MODEL or "gemini-1.5-flash"
-        self._gemini_configured = False
-
-        if self.api_key and GENAI_AVAILABLE:
-            try:
-                genai.configure(api_key=self.api_key)
-                self._gemini_configured = True
-                logger.info(f"Gemini LLM configured with model: {self.model_name}")
-            except Exception as e:
-                logger.warning(f"Failed to configure Gemini LLM: {e}")
+        self.model_name = settings.GEMINI_MODEL or "gemini-2.5-flash"
+        self._gemini_configured = bool(self.api_key)
 
     async def extract_query_intent(self, query: str) -> QueryIntent:
         """
         Parses raw natural-language query into structured QueryIntent.
-        Uses Gemini if configured, otherwise falls back to deterministic heuristic parsing.
+        Uses Gemini if online and configured, otherwise falls back to deterministic heuristic parsing.
         """
-        if self._gemini_configured:
+        if self._gemini_configured and is_online():
             try:
                 intent = await self._call_gemini_query_intent(query)
                 if intent:
@@ -84,6 +97,14 @@ class LLMService:
 
     async def _call_gemini_query_intent(self, query: str) -> Optional[QueryIntent]:
         """Calls Gemini API with structured JSON output, trying candidate models."""
+        genai = get_genai()
+        if not genai:
+            return None
+        try:
+            genai.configure(api_key=self.api_key, transport="rest")
+        except Exception:
+            return None
+
         candidate_models = [self.model_name, "gemini-2.5-flash", "gemini-flash-latest", "gemini-1.5-flash"]
         last_error = None
 
@@ -95,7 +116,10 @@ class LLMService:
                     model_name=m_name,
                     generation_config={"response_mime_type": "application/json"}
                 )
-                response = model.generate_content(prompt)
+                response = model.generate_content(
+                    prompt,
+                    request_options={"timeout": 3.0}
+                )
                 text = response.text.strip()
 
                 # Clean markdown fences if any
@@ -138,64 +162,75 @@ class LLMService:
         # 1. Location extraction
         city, state, country = None, None, None
 
-        # Known city-state-country mapping
-        geo_mappings = [
-            ("washington dc", "Washington DC", "District of Columbia", "USA"),
-            ("washington, dc", "Washington DC", "District of Columbia", "USA"),
-            ("washington d.c.", "Washington DC", "District of Columbia", "USA"),
-            ("new york", "New York", "New York", "USA"),
-            ("nyc", "New York", "New York", "USA"),
-            ("san francisco", "San Francisco", "California", "USA"),
-            ("london", "London", "England", "UK"),
-            ("ahmedabad", "Ahmedabad", "Gujarat", "India"),
-            ("mumbai", "Mumbai", "Maharashtra", "India"),
-            ("delhi", "Delhi", "Delhi", "India"),
-            ("bengaluru", "Bengaluru", "Karnataka", "India"),
-            ("bangalore", "Bengaluru", "Karnataka", "India"),
-            ("dubai", "Dubai", "Dubai", "UAE"),
-            ("abu dhabi", "Abu Dhabi", "Abu Dhabi", "UAE"),
-            ("tokyo", "Tokyo", "Tokyo", "Japan"),
-            ("paris", "Paris", "Île-de-France", "France"),
-            ("berlin", "Berlin", "Berlin", "Germany"),
-            ("toronto", "Toronto", "Ontario", "Canada"),
-            ("sydney", "Sydney", "New South Wales", "Australia"),
-        ]
+        # Dynamic location extraction supporting arbitrary expressions:
+        # e.g., "in City, State, Country", "in City in Country", "in Location"
+        loc_prepositions = [r"\bin\b", r"\bat\b", r"\bnear\b", r"\bfrom\b", r"\baround\b"]
+        prep_regex = r"(?:" + "|".join(loc_prepositions) + r")\s+(.+)$"
+        prep_match = re.search(prep_regex, q, re.IGNORECASE)
 
-        # Check in query
-        location_found = False
-        for key, c, s, ctry in geo_mappings:
-            if key in lower_q:
-                city = c
-                state = s
-                country = ctry
-                location_found = True
+        raw_location_str = ""
+        if prep_match:
+            raw_location_str = prep_match.group(1).strip()
+
+        # Global country recognition dictionary
+        GLOBAL_COUNTRIES = {
+            "usa": "USA", "united states": "USA", "us": "USA", "america": "USA",
+            "uk": "UK", "united kingdom": "UK", "britain": "UK", "england": "UK", "scotland": "UK",
+            "india": "India", "uae": "UAE", "united arab emirates": "UAE", "dubai": "UAE",
+            "canada": "Canada", "australia": "Australia", "germany": "Germany", "france": "France",
+            "singapore": "Singapore", "japan": "Japan", "brazil": "Brazil", "spain": "Spain",
+            "italy": "Italy", "netherlands": "Netherlands", "switzerland": "Switzerland", "sweden": "Sweden"
+        }
+
+        # Check country from raw location or full query
+        for alias, ctry_name in GLOBAL_COUNTRIES.items():
+            if re.search(r"\b" + re.escape(alias) + r"\b", lower_q):
+                country = ctry_name
                 break
 
-        # Fallback country check if no specific city matched
-        if not location_found:
-            country_patterns = [
-                (r"\b(usa|united states|america)\b", "USA"),
-                (r"\b(uk|united kingdom|britain|england)\b", "UK"),
-                (r"\b(india)\b", "India"),
-                (r"\b(uae|united arab emirates)\b", "UAE"),
-                (r"\b(canada)\b", "Canada"),
-                (r"\b(australia)\b", "Australia"),
-                (r"\b(germany)\b", "Germany"),
-                (r"\b(france)\b", "France"),
-            ]
-            for pattern, ctry_name in country_patterns:
-                if re.search(pattern, lower_q):
-                    country = ctry_name
-                    break
+        # Extract city and state from location string: "in City in Country" or "in City, State"
+        if raw_location_str:
+            # Check for "City in Country"
+            in_country_match = re.search(r"^(.*?)\s+in\s+([A-Za-z\s]+)$", raw_location_str, re.IGNORECASE)
+            if in_country_match:
+                candidate_city = in_country_match.group(1).strip()
+                candidate_country = in_country_match.group(2).strip()
+                city = candidate_city.title()
+                if not country:
+                    country = GLOBAL_COUNTRIES.get(candidate_country.lower(), candidate_country.title())
+            elif "," in raw_location_str:
+                parts = [p.strip() for p in raw_location_str.split(",") if p.strip()]
+                if len(parts) >= 2:
+                    city = parts[0].title()
+                    # If second part is country or state
+                    sec = parts[1].strip()
+                    if sec.lower() in GLOBAL_COUNTRIES:
+                        country = GLOBAL_COUNTRIES[sec.lower()]
+                    else:
+                        state = sec.title()
+                if len(parts) >= 3 and not country:
+                    country = GLOBAL_COUNTRIES.get(parts[2].lower(), parts[2].title())
+            elif not city:
+                # Remove country token if present at the end
+                cleaned_loc = raw_location_str
+                if country and country.lower() in cleaned_loc.lower():
+                    cleaned_loc = re.sub(r"\b" + re.escape(country) + r"\b", "", cleaned_loc, flags=re.IGNORECASE).strip()
+                city = cleaned_loc.title() if cleaned_loc else raw_location_str.title()
 
-            # Check for city before country: "in <City> [in <Country>]"
-            loc_match = re.search(r"\bin\s+([A-Za-z\s]+?)(?:\s+in\s+([A-Za-z\s]+))?$", q, re.IGNORECASE)
-            if loc_match:
-                extracted_city = loc_match.group(1).strip()
-                if extracted_city and not city:
-                    city = extracted_city.title()
-                if loc_match.group(2) and not country:
-                    country = loc_match.group(2).strip().upper()
+        # Known regional state mappings
+        if city:
+            if "washington" in city.lower():
+                state = "District of Columbia"
+                country = "USA"
+            elif "new york" in city.lower():
+                state = "New York"
+                country = "USA"
+            elif "london" in city.lower():
+                state = "England"
+                country = "UK"
+            elif "ahmedabad" in city.lower():
+                state = "Gujarat"
+                country = "India"
 
         location = LocationDetail(city=city, state=state, country=country)
 

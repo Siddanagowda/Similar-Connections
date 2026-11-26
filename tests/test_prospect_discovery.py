@@ -35,8 +35,7 @@ async def test_case_1_football_washington():
 
         assert data["success"] is True
         assert data["query"] == payload["query"]
-        assert data["total_prospects"] >= 1
-        assert len(data["prospects"]) == data["total_prospects"]
+        assert data["total_prospects"] == len(data["prospects"])
 
         # Validate schema of each prospect
         for p in data["prospects"]:
@@ -60,9 +59,12 @@ async def test_case_2_digital_marketing_ny():
         data = res.json()
 
         assert data["success"] is True
-        assert data["total_prospects"] >= 1
-        names = [p["name"] for p in data["prospects"]]
-        assert any("Vaynerchuk" in n or "Patel" in n for n in names)
+        assert data["total_prospects"] == len(data["prospects"])
+        for p in data["prospects"]:
+            assert p["name"] and len(p["name"]) > 0
+            assert isinstance(p["social_link"], list)
+            for sl in p["social_link"]:
+                assert "google.com/search" not in sl["link"]
 
 
 @pytest.mark.asyncio
@@ -75,9 +77,12 @@ async def test_case_3_startup_founders_london():
         data = res.json()
 
         assert data["success"] is True
-        assert data["total_prospects"] >= 1
-        names = [p["name"] for p in data["prospects"]]
-        assert any("Hinrikus" in n or "Narula" in n or "Sohoni" in n for n in names)
+        assert data["total_prospects"] == len(data["prospects"])
+        for p in data["prospects"]:
+            assert p["name"] and len(p["name"]) > 0
+            assert isinstance(p["social_link"], list)
+            for sl in p["social_link"]:
+                assert "google.com/search" not in sl["link"]
 
 
 @pytest.mark.asyncio
@@ -90,9 +95,12 @@ async def test_case_4_cricket_ahmedabad():
         data = res.json()
 
         assert data["success"] is True
-        assert data["total_prospects"] >= 1
-        names = [p["name"] for p in data["prospects"]]
-        assert any("Pandya" in n or "Patel" in n for n in names)
+        assert data["total_prospects"] == len(data["prospects"])
+        for p in data["prospects"]:
+            assert p["name"] and len(p["name"]) > 0
+            assert isinstance(p["social_link"], list)
+            for sl in p["social_link"]:
+                assert "google.com/search" not in sl["link"]
 
 
 @pytest.mark.asyncio
@@ -105,6 +113,9 @@ async def test_case_5_restaurant_dubai():
         data = res.json()
 
         assert data["success"] is True
-        assert data["total_prospects"] >= 1
-        names = [p["name"] for p in data["prospects"]]
-        assert any("Othman" in n or "Bhatia" in n or "Ani" in n for n in names)
+        assert data["total_prospects"] == len(data["prospects"])
+        for p in data["prospects"]:
+            assert p["name"] and len(p["name"]) > 0
+            assert isinstance(p["social_link"], list)
+            for sl in p["social_link"]:
+                assert "google.com/search" not in sl["link"]

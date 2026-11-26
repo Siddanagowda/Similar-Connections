@@ -1,11 +1,12 @@
 """
-Relevance scoring and filtering service.
-Evaluates interest relevance, location relevance, and audience alignment.
+Relevance scoring and ranking service.
+Evaluates query-to-profile relevance based strictly on topical and geographic alignment.
+Separates relevance from contact presence.
 """
 from typing import List, Tuple
 import logging
 from app.config import settings
-from app.schemas import RawProfileCandidate, QueryIntent, Prospect
+from app.schemas import RawProfileCandidate, QueryIntent
 
 logger = logging.getLogger(__name__)
 
@@ -16,37 +17,37 @@ class RelevanceService:
 
     def score_candidate(self, candidate: RawProfileCandidate, intent: QueryIntent) -> float:
         """
-        Calculates a relevance score from 0.0 to 1.0 for a raw candidate.
+        Calculates a relevance score from 0.0 to 1.0 strictly based on query alignment.
         Weighted components:
-          - Interest relevance: 40%
+          - Interest relevance: 50%
           - Location relevance: 35%
-          - Audience/role alignment: 15%
-          - Profile verification & contact presence: 10%
+          - Audience / persona alignment: 15%
+        (Contact presence is NOT included in relevance scoring).
         """
         score = 0.0
         text_corpus = f"{candidate.name} {candidate.bio_snippet} {candidate.location or ''} {candidate.url}".lower()
 
-        # 1. Interest Match (Weight: 0.40)
+        # 1. Interest Match (Weight: 0.50)
         interest = (intent.interest or "").lower()
         if interest:
             if interest in text_corpus:
-                score += 0.40
+                score += 0.50
             else:
-                # Check search keywords
                 for kw in intent.search_keywords:
                     if kw.lower() in text_corpus:
-                        score += 0.25
+                        score += 0.30
                         break
 
         # 2. Location Match (Weight: 0.35)
         city = (intent.location.city or "").lower()
         country = (intent.location.country or "").lower()
+
         if city and city in text_corpus:
             score += 0.25
         if country and country in text_corpus:
             score += 0.10
         elif not city and not country:
-            # Query didn't restrict location
+            # If query had no geographic constraints, grant full location credit
             score += 0.35
 
         # 3. Audience / Persona alignment (Weight: 0.15)
@@ -54,15 +55,9 @@ class RelevanceService:
         if audience and audience in text_corpus:
             score += 0.15
         else:
-            role_indicators = ["founder", "owner", "ceo", "director", "lover", "enthusiast", "agency", "creator"]
+            role_indicators = ["founder", "owner", "ceo", "director", "lover", "enthusiast", "agency", "creator", "player", "chef"]
             if any(r in text_corpus for r in role_indicators):
                 score += 0.10
-
-        # 4. Contacts / Multi-signal presence (Weight: 0.10)
-        if candidate.emails or candidate.phones or candidate.whatsapp_links:
-            score += 0.10
-        elif candidate.url:
-            score += 0.05
 
         return round(min(score, 1.0), 3)
 
