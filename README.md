@@ -698,7 +698,7 @@ The project includes a ready-to-deploy [`render.yaml`](render.yaml) file:
 
 ## 11. Evaluation Rubric Compliance
 
-| Criteria | Maximum Marks | Implementation Evidence | Score Claimed |
+| Criteria | Maximum Marks | Implementation Evidence | Status |
 |---|:---:|---|:---:|
 | **Natural Language Query Understanding** | 15 | Gemini LLM intent extraction with structured hierarchy (`interest`, `audience`, `city`, `state`, `country`, `target_type`) + heuristic fallback | Implemented |
 | **Multi-Platform Discovery Implementation** | 25 | Modular adapters for Google, LinkedIn, X, YouTube, Instagram, Facebook, Threads, WhatsApp, Email with independent error handling | Implemented |
