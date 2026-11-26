@@ -173,16 +173,28 @@ def is_valid_platform_profile_url(platform: str, url: str) -> bool:
     if not url or not isinstance(url, str):
         return False
     clean_url = clean_tracking_params(url)
+    # Search engines commonly append non-identity query parameters to profile
+    # URLs (trk, originalSubdomain, hl, si, etc.). They are not part of the
+    # profile path and must not cause an otherwise valid URL to be rejected.
+    parsed_input = urlparse(clean_url)
+    profile_url = urlunparse((
+        parsed_input.scheme or "https",
+        parsed_input.netloc,
+        parsed_input.path.rstrip("/"),
+        "",
+        "",
+        ""
+    ))
     pattern = PLATFORM_URL_PATTERNS.get(platform)
     if not pattern:
         # For platforms without strict regex (e.g. Google indexed sites), ensure valid HTTP(S) URL
         try:
-            parsed = urlparse(clean_url)
+            parsed = urlparse(profile_url)
             return bool(parsed.scheme in ("http", "https") and parsed.netloc)
         except Exception:
             return False
 
-    if not pattern.match(clean_url):
+    if not pattern.match(profile_url):
         return False
 
     # Check for reserved non-profile words in path
@@ -214,6 +226,6 @@ def normalize_profile_url(platform: str, url: str) -> str:
     if platform == "X" and "twitter.com" in netloc:
         netloc = netloc.replace("twitter.com", "x.com")
 
-    # Strip trailing slash from path
+    # Query parameters and fragments are not needed in canonical profile links.
     path = parsed.path.rstrip("/")
-    return urlunparse(("https", netloc, path, parsed.params, parsed.query, ""))
+    return urlunparse(("https", netloc, path, "", "", ""))
