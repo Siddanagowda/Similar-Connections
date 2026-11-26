@@ -6,7 +6,7 @@
 [![Tests](https://img.shields.io/badge/Tests-24%20Passed%20(100%25)-success.svg)](https://docs.pytest.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-An intelligent, production-ready Python + FastAPI backend application that accepts arbitrary natural-language prospect discovery queries (e.g. `"Football lovers in Washington DC in USA"`), understands audience and geographic intent using LLM (Google Gemini), discovers verified prospects across 9 public platforms, extracts names, locations, and public contacts (emails, phone numbers, WhatsApp), deduplicates identities using RapidFuzz string distance, scores relevance, and returns clean, consolidated JSON records on port `4000`.
+A Python + FastAPI backend application that accepts natural-language prospect discovery queries (e.g. `"Football lovers in Washington DC in USA"`), understands audience and geographic intent using LLM (Google Gemini), discovers candidate profiles from public indexed sources across 9 platform targets, extracts names, locations, and publicly surfaced contact references (emails, phone numbers, WhatsApp), consolidates likely duplicate identities using RapidFuzz string distance, scores relevance, and returns clean, consolidated JSON records on port `4000`.
 
 ---
 
@@ -89,16 +89,16 @@ flowchart TD
 3. **Multi-Source Waterfall Discovery**: Executes search queries across all platform targets concurrently via waterfall fallback (Tavily &rarr; SerpAPI &rarr; Live Web Search).
 4. **Evidence & Provenance Tracking**: `EvidenceService` captures original snippets, matched keywords, and discovery source URLs for each candidate.
 5. **Contact Discovery & Validation**: `ContactService` parses verified public emails, phone numbers, and WhatsApp links; validates phone numbers to E.164 standard via `phonenumbers` and emails via `email-validator`.
-6. **Relevance Scoring**: Weighted relevance engine evaluates interest match (50%), location match (35%), and audience match (15%), ensuring unbiased ranking without penalizing profiles lacking public contact numbers.
+6. **Relevance Scoring**: Weighted relevance engine evaluates interest match (50%), location match (35%), and audience match (15%). Contact presence is not used as a relevance signal.
 7. **Entity Resolution & Deduplication**: `IdentityService` consolidates records belonging to the same individual using multi-factor identity matching: shared verified contacts, cross-platform username equality, fuzzy name matching with location alignment, and common name protections.
 
 ---
 
 ## 2. Supported Platforms
 
-| No. | Platform | Discovery Target | Profile Link Verification Rule |
+| No. | Platform | Discovery Target | Profile Link Validation Rule |
 |:---:|:---|:---|:---|
-| 1 | **Google** | Discovery source for indexed profiles & personal websites | Verified domain presence; **excludes generic google.com/search results (Rule 79)** |
+| 1 | **Google** | Discovery source for indexed profiles & personal websites | Checks for a candidate domain/profile URL; **excludes generic google.com/search results (Rule 79)** |
 | 2 | **LinkedIn** | Public professional profiles | `linkedin.com/in/<username>` & `linkedin.com/company/<id>` |
 | 3 | **X (Twitter)** | Public user profiles & handles | `x.com/<username>` (excludes `/status/`, `/home`, etc.) |
 | 4 | **YouTube** | Public creator & channel profiles | `youtube.com/@<handle>` or `youtube.com/channel/<id>` |
@@ -120,8 +120,8 @@ flowchart TD
 - **LLM Engine**: Google Gemini (`gemini-1.5-flash` / `gemini-2.0-flash` via `google-genai` and `google-generativeai`)
 - **Entity Resolution / Deduplication**: RapidFuzz (Token Sort Ratio & Token Set Ratio)
 - **Contact Validation**:
-  - `phonenumbers` (Google's libphonenumber Python port for international E.164 formatting)
-  - `email-validator` (Syntax and deliverability validation)
+  - `phonenumbers` (Google's libphonenumber Python port for international phone-number parsing and E.164 formatting)
+  - `email-validator` (email address syntax validation; this does not prove mailbox ownership or successful delivery)
 - **HTTP & Parsing**: HTTPX (async client), BeautifulSoup4
 - **Testing**: Pytest, Pytest-Asyncio
 - **Deployment**: Docker, Render (`render.yaml`), Railway
@@ -327,7 +327,7 @@ curl http://localhost:4000/health
 
 ## 7. Benchmark Test Cases & Sample Responses
 
-Below are actual outputs from running the 5 practical test cases required by the assessment specification.
+The following are illustrative response-format examples for the 5 practical test cases. Names, profile URLs, emails, and phone numbers shown in these examples are placeholders; they are not verified prospect records and must not be used for outreach. Use the live endpoint to obtain current search results.
 
 ### Test Case 1: `"Football lovers in Washington DC in USA"`
 ```bash
@@ -700,7 +700,7 @@ The project includes a ready-to-deploy [`render.yaml`](render.yaml) file:
 |---|:---:|---|:---:|
 | **Natural Language Query Understanding** | 15 | Gemini LLM intent extraction with structured hierarchy (`interest`, `audience`, `city`, `state`, `country`, `target_type`) + heuristic fallback | 15/15 |
 | **Multi-Platform Discovery Implementation** | 25 | Modular adapters for Google, LinkedIn, X, YouTube, Instagram, Facebook, Threads, WhatsApp, Email with independent error handling | 25/25 |
-| **Prospect Relevance & Accuracy** | 15 | Weighted scoring algorithm (40% interest, 35% location, 15% role, 10% signals) filtering low-confidence noise | 15/15 |
+| **Prospect Relevance & Accuracy** | 15 | Weighted scoring algorithm (50% interest, 35% location, 15% audience/persona); configurable relevance threshold | Implemented |
 | **Duplicate Detection & Consolidation** | 10 | RapidFuzz entity resolution (`token_sort_ratio`, `token_set_ratio`, handle matching) consolidating multiple social links | 10/10 |
 | **Public Profile & Contact Validation** | 10 | `phonenumbers` E.164 standardization, `email-validator` syntax check, strict platform URL regex, disallow generic feeds/search URLs | 10/10 |
 | **Structured JSON Output & API Design** | 10 | Pydantic response validation, POST `/prospect-discovery` on port 4000, OpenAPI Swagger docs at `/docs` | 10/10 |
