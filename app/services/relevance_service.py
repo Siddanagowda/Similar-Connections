@@ -93,11 +93,33 @@ class RelevanceService:
         # presence of the sport keyword or a coaching/team affiliation.
         if re.search(r"\b(lovers?|fans?|enthusiasts?|supporters?)\b", audience):
             fan_terms = [
-                "fan", "fans", "lover", "lovers", "enthusiast", "enthusiasts",
-                "supporter", "supporters", "avid", "passionate about", "love",
-                "loves", "follows"
+                f"{interest} fan",
+                f"fan of {interest}",
+                f"{interest} fans",
+                f"{interest} enthusiast",
+                f"enthusiast for {interest}",
+                f"{interest} supporter",
+                f"supporter of {interest}",
+                f"{interest} lover",
+                f"lover of {interest}",
+                f"passionate about {interest}",
+                f"love {interest}",
+                f"loves {interest}",
+                f"follows {interest}",
+                f"{interest} follower",
+                f"{interest} followers",
+                "fan of the game",
+                "loves the game",
+                "love the game",
+                "passionate about the game",
+                "fan of the sport",
+                "loves the sport",
+                "love the sport",
             ]
-            has_fan_signal = any(f" {_normalize_text(term)} " in normalized for term in fan_terms)
+            has_fan_signal = bool(interest) and any(
+                f" {_normalize_text(term)} " in normalized
+                for term in fan_terms
+            )
             has_interest = bool(interest and interest in normalized)
             return has_fan_signal and has_interest
 
