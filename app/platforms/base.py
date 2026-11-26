@@ -105,28 +105,30 @@ class BasePlatformAdapter(ABC):
             )
             if city_match and loc_str:
                 detected_location = loc_str
-            elif country_match:
-                # Country evidence alone does not prove the requested city.
-                detected_location = intent.location.country
-            elif intent.location.city and "washington" in intent.location.city.lower() and "dc" in intent.location.city.lower():
-                # Preserve the actually-mentioned suburb instead of claiming
-                # that a nearby metro-area profile is located in Washington DC.
-                metro_locations = [
-                    ("silver spring", "Silver Spring, Maryland (Washington DC metro area)"),
-                    ("bethesda", "Bethesda, Maryland (Washington DC metro area)"),
-                    ("arlington virginia", "Arlington, Virginia (Washington DC metro area)"),
-                    ("alexandria virginia", "Alexandria, Virginia (Washington DC metro area)"),
-                    ("falls church virginia", "Falls Church, Virginia (Washington DC metro area)"),
-                    ("hyattsville maryland", "Hyattsville, Maryland (Washington DC metro area)"),
-                    ("college park maryland", "College Park, Maryland (Washington DC metro area)"),
-                    ("rockville maryland", "Rockville, Maryland (Washington DC metro area)"),
-                    ("takoma park maryland", "Takoma Park, Maryland (Washington DC metro area)"),
-                ]
-                normalized_text = re.sub(r"[^a-z0-9]+", " ", combined_text.lower())
-                for location_token, formatted_location in metro_locations:
-                    if location_token in normalized_text:
-                        detected_location = formatted_location
-                        break
+            else:
+                # Preserve an explicitly-mentioned nearby suburb instead of
+                # claiming that a metro-area profile is located in Washington DC.
+                if intent.location.city and "washington" in intent.location.city.lower() and "dc" in intent.location.city.lower():
+                    metro_locations = [
+                        ("silver spring", "Silver Spring, Maryland (Washington DC metro area)"),
+                        ("bethesda", "Bethesda, Maryland (Washington DC metro area)"),
+                        ("arlington virginia", "Arlington, Virginia (Washington DC metro area)"),
+                        ("alexandria virginia", "Alexandria, Virginia (Washington DC metro area)"),
+                        ("falls church virginia", "Falls Church, Virginia (Washington DC metro area)"),
+                        ("hyattsville maryland", "Hyattsville, Maryland (Washington DC metro area)"),
+                        ("college park maryland", "College Park, Maryland (Washington DC metro area)"),
+                        ("rockville maryland", "Rockville, Maryland (Washington DC metro area)"),
+                        ("takoma park maryland", "Takoma Park, Maryland (Washington DC metro area)"),
+                    ]
+                    normalized_text = re.sub(r"[^a-z0-9]+", " ", combined_text.lower())
+                    for location_token, formatted_location in metro_locations:
+                        if location_token in normalized_text:
+                            detected_location = formatted_location
+                            break
+
+                if not detected_location and country_match:
+                    # Country evidence alone does not prove the requested city.
+                    detected_location = intent.location.country
 
         return RawProfileCandidate(
             platform=self.platform_name,
