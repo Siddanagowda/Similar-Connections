@@ -10,6 +10,33 @@ An intelligent, production-ready Python + FastAPI backend application that accep
 
 ---
 
+
+## Live Deployment
+
+The API is deployed on Render and can be accessed using the links below:
+
+| Resource | URL |
+|:---|:---|
+| API base URL | https://similar-connections.onrender.com/ |
+| Interactive Swagger documentation | https://similar-connections.onrender.com/docs |
+| Health check | https://similar-connections.onrender.com/health |
+
+### Try the prospect discovery endpoint
+
+Send a POST request to `/prospect-discovery` with a natural-language query:
+
+```bash
+curl -X POST "https://similar-connections.onrender.com/prospect-discovery" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Startup founders in London UK"}'
+```
+
+The response follows the `ProspectDiscoveryResponse` schema documented in Swagger. Live discovery results depend on the availability and indexing of the configured public search providers. For an interactive test, open the Swagger documentation, expand **POST /prospect-discovery**, select **Try it out**, enter the JSON request body, and execute it.
+
+> The hosted service may take a short time to respond after an idle period on the free hosting tier.
+
+---
+
 ## Table of Contents
 
 - [1. Architecture & Processing Flow](#1-architecture--processing-flow)
