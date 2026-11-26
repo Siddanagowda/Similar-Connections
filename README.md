@@ -3,7 +3,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.13%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Google Gemini](https://img.shields.io/badge/LLM-Google%20Gemini-4285F4.svg?logo=google&logoColor=white)](https://aistudio.google.com/)
-[![Tests](https://img.shields.io/badge/Tests-24%20Passed%20(100%25)-success.svg)](https://docs.pytest.org/)
+[![Tests](https://img.shields.io/badge/Tests-Pytest-blue.svg)](https://docs.pytest.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A Python + FastAPI backend application that accepts natural-language prospect discovery queries (e.g. `"Football lovers in Washington DC in USA"`), understands audience and geographic intent using LLM (Google Gemini), discovers candidate profiles from public indexed sources across 9 platform targets, extracts names, locations, and publicly surfaced contact references (emails, phone numbers, WhatsApp), consolidates likely duplicate identities using RapidFuzz string distance, scores relevance, and returns clean, consolidated JSON records on port `4000`.
@@ -237,8 +237,8 @@ TAVILY_API_KEY=
 SERPAPI_API_KEY=
 ```
 
-> [!TIP]
-> The application includes a resilient local query parser and search discovery engine. It functions smoothly even if no external search API keys are provided.
+> [!NOTE]
+> When no search API key is configured, the service attempts a live DDGS search fallback. Public search engines may rate-limit or return incomplete results, especially from cloud-hosted environments. For more predictable production discovery, configure a Tavily or SerpAPI key in the hosting provider's environment settings. The local heuristic query parser remains available if Gemini is unconfigured or unavailable.
 
 ### 5. Run the Application
 ```bash
