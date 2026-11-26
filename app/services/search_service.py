@@ -1,18 +1,21 @@
 """
-Search service providing genuine dynamic multi-source discovery.
-Implements a resilient waterfall fallback chain:
-Tavily API -> SerpAPI -> Live Web Search -> Graceful Partial Response.
-Zero hardcoded records.
+Search service providing dynamic multi-source prospect discovery.
+Provider waterfall:
+Tavily API -> SerpAPI -> live DDGS search -> graceful empty response.
+
+Searches are attempted directly with bounded timeouts. We do not use a
+separate socket probe to decide whether outbound HTTPS search is available:
+cloud hosts may block arbitrary DNS TCP probes while allowing HTTPS egress.
 """
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from typing import List
 import httpx
+
 from app.config import settings
 from app.schemas import QueryIntent, RawProfileCandidate
 from app.platforms import get_all_platform_adapters, BasePlatformAdapter
 from app.services.evidence_service import evidence_service
-from app.services.llm_service import is_online
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +23,8 @@ logger = logging.getLogger(__name__)
 class SearchService:
     def __init__(self):
         self.adapters: List[BasePlatformAdapter] = get_all_platform_adapters()
-        self.timeout = 2.0  # Fast timeout for responsive discovery
+        # Cloud-hosted search calls need more than a 1–2 second budget.
+        self.timeout = max(8.0, float(settings.REQUEST_TIMEOUT_SECONDS))
 
     async def search_tavily(self, query: str, max_results: int = 5) -> List[dict]:
         """Tavily search API integration."""
@@ -37,18 +41,18 @@ class SearchService:
                         "search_depth": "basic"
                     }
                 )
-                if res.status_code == 200:
-                    data = res.json()
-                    results = [
-                        {"title": r.get("title", ""), "url": r.get("url", ""), "snippet": r.get("content", "")}
-                        for r in data.get("results", [])
-                    ]
-                    if results:
-                        logger.info(f"Tavily returned {len(results)} results for '{query}'")
-                        return results
-        except Exception as e:
-            logger.warning(f"Tavily search error for '{query}': {e}. Falling back to next provider...")
-        return []
+                res.raise_for_status()
+                data = res.json()
+                results = [
+                    {"title": r.get("title", ""), "url": r.get("url", ""), "snippet": r.get("content", "")}
+                    for r in data.get("results", [])
+                ]
+                if results:
+                    logger.info("Tavily returned %d results for query: %s", len(results), query)
+                return results
+        except Exception as exc:
+            logger.warning("Tavily search failed for query '%s': %s", query, exc)
+            return []
 
     async def search_serpapi(self, query: str, max_results: int = 5) -> List[dict]:
         """SerpAPI search integration."""
@@ -64,115 +68,149 @@ class SearchService:
                         "num": max_results
                     }
                 )
-                if res.status_code == 200:
-                    data = res.json()
-                    results = [
-                        {"title": r.get("title", ""), "url": r.get("link", ""), "snippet": r.get("snippet", "")}
-                        for r in data.get("organic_results", [])
-                    ]
-                    if results:
-                        logger.info(f"SerpAPI returned {len(results)} results for '{query}'")
-                        return results
-        except Exception as e:
-            logger.warning(f"SerpAPI search error for '{query}': {e}. Falling back to next provider...")
-        return []
+                res.raise_for_status()
+                data = res.json()
+                results = [
+                    {"title": r.get("title", ""), "url": r.get("link", ""), "snippet": r.get("snippet", "")}
+                    for r in data.get("organic_results", [])
+                ]
+                if results:
+                    logger.info("SerpAPI returned %d results for query: %s", len(results), query)
+                return results
+        except Exception as exc:
+            logger.warning("SerpAPI search failed for query '%s': %s", query, exc)
+            return []
 
     async def search_live_web(self, query: str, max_results: int = 5) -> List[dict]:
-        """Live web search fallback via ddgs with non-blocking fast timeout."""
+        """Live web-search fallback through DDGS with a bounded timeout."""
         try:
             from ddgs import DDGS
+
             def _sync_query():
                 try:
-                    return list(DDGS(timeout=1.5).text(query, max_results=max_results))
-                except Exception:
+                    return list(DDGS(timeout=6.0).text(query, max_results=max_results))
+                except Exception as exc:
+                    logger.warning("DDGS search failed for query '%s': %s", query, exc)
                     return []
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             results = await asyncio.wait_for(
                 loop.run_in_executor(None, _sync_query),
-                timeout=2.0
+                timeout=7.0
             )
-            parsed = []
-            for item in results:
-                parsed.append({
+            parsed = [
+                {
                     "title": item.get("title", ""),
                     "url": item.get("href", ""),
                     "snippet": item.get("body", "")
-                })
+                }
+                for item in results
+            ]
+            if parsed:
+                logger.info("DDGS returned %d results for query: %s", len(parsed), query)
             return parsed
-        except Exception:
+        except asyncio.TimeoutError:
+            logger.warning("DDGS search timed out for query: %s", query)
+            return []
+        except Exception as exc:
+            logger.warning("Live web search failed for query '%s': %s", query, exc)
             return []
 
     async def search_waterfall(self, query: str, max_results: int = 5) -> List[dict]:
         """
-        Executes search using a robust waterfall fallback chain:
-        1. Tavily API (if configured)
-        2. SerpAPI (if configured and Tavily returns empty/fails)
-        3. Live Web Search (if previous providers are unconfigured or fail)
-        4. Empty list (graceful degradation)
+        Try configured search providers in order. Each provider is called directly;
+        a failed provider falls through to the next one.
         """
-        if not is_online():
-            return []
-
-        # Step 1: Tavily
         if settings.TAVILY_API_KEY:
             results = await self.search_tavily(query, max_results)
             if results:
                 return results
 
-        # Step 2: SerpAPI
         if settings.SERPAPI_API_KEY:
             results = await self.search_serpapi(query, max_results)
             if results:
                 return results
 
-        # Step 3: Resilient live web search fallback
-        results = await self.search_live_web(query, max_results)
-        if results:
-            return results
-
-        return []
+        return await self.search_live_web(query, max_results)
 
     async def discover_candidates(self, intent: QueryIntent) -> List[RawProfileCandidate]:
         """
-        Genuinely discovers public prospects across all platforms in real-time.
-        Zero hardcoded records.
+        Discover prospects across registered platform adapters.
+        Try alternative query formulations when an adapter's first query yields
+        no valid profile candidates.
         """
         candidates: List[RawProfileCandidate] = []
         search_tasks = []
 
-        # Execute search for each platform adapter concurrently
         for adapter in self.adapters:
             queries = adapter.generate_search_queries(intent)
             if queries:
-                search_tasks.append(self._search_and_extract(adapter, queries[0], intent))
+                # Pass all generated alternatives; the adapter method will try
+                # them sequentially and stop once enough candidates are collected.
+                search_tasks.append(self._search_and_extract(adapter, queries, intent))
 
         results_by_adapter = await asyncio.gather(*search_tasks, return_exceptions=True)
 
-        for res in results_by_adapter:
-            if isinstance(res, list):
-                for cand in res:
-                    evidence_service.record_evidence(cand, intent)
-                    candidates.append(cand)
+        for adapter_result in results_by_adapter:
+            if isinstance(adapter_result, Exception):
+                logger.warning("A platform discovery task failed: %s", adapter_result)
+                continue
+            for candidate in adapter_result:
+                evidence_service.record_evidence(candidate, intent)
+                candidates.append(candidate)
 
-        logger.info(f"Discovered a total of {len(candidates)} raw dynamic candidates across platforms")
+        logger.info(
+            "Discovery collected %d raw candidates across %d platform adapters",
+            len(candidates),
+            len(search_tasks)
+        )
         return candidates
 
     async def _search_and_extract(
-        self, adapter: BasePlatformAdapter, query: str, intent: QueryIntent
+        self,
+        adapter: BasePlatformAdapter,
+        queries: List[str],
+        intent: QueryIntent
     ) -> List[RawProfileCandidate]:
-        """Runs search for a specific platform adapter query and extracts candidates."""
-        results = await self.search_waterfall(query, max_results=settings.MAX_SEARCH_RESULTS_PER_PLATFORM)
+        """Try an adapter's query alternatives until candidates are found."""
         candidates: List[RawProfileCandidate] = []
+        seen_urls = set()
+        max_candidates = settings.MAX_SEARCH_RESULTS_PER_PLATFORM
 
-        for item in results:
-            title = item.get("title", "")
-            snippet = item.get("snippet", "")
-            url = item.get("url", "")
-            cand = adapter.extract_candidate(title, snippet, url, intent)
-            if cand:
-                candidates.append(cand)
+        for query in queries:
+            results = await self.search_waterfall(
+                query,
+                max_results=settings.MAX_SEARCH_RESULTS_PER_PLATFORM
+            )
+            logger.info(
+                "%s search returned %d web results for query: %s",
+                adapter.platform_name,
+                len(results),
+                query
+            )
 
+            for item in results:
+                title = item.get("title", "")
+                snippet = item.get("snippet", "")
+                url = item.get("url", "")
+                candidate = adapter.extract_candidate(title, snippet, url, intent)
+                if candidate and candidate.url not in seen_urls:
+                    candidates.append(candidate)
+                    seen_urls.add(candidate.url)
+
+            if len(candidates) >= max_candidates:
+                break
+
+            if candidates:
+                # One query produced usable profiles. Avoid unnecessary requests
+                # and search-provider rate limits.
+                break
+
+        logger.info(
+            "%s adapter extracted %d valid profile candidates",
+            adapter.platform_name,
+            len(candidates)
+        )
         return candidates
 
 
