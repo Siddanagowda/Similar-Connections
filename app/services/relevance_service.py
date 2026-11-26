@@ -53,13 +53,13 @@ class RelevanceService:
                     "dmv",
                     "silver spring",
                     "bethesda",
-                    "arlington",
-                    "alexandria",
-                    "falls church",
-                    "hyattsville",
-                    "college park",
-                    "rockville",
-                    "takoma park",
+                    "arlington virginia",
+                    "alexandria virginia",
+                    "falls church virginia",
+                    "hyattsville maryland",
+                    "college park maryland",
+                    "rockville maryland",
+                    "takoma park maryland",
                 ]
                 if any(f" {_normalize_text(alias)} " in normalized for alias in dc_aliases):
                     return True
