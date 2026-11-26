@@ -45,3 +45,16 @@ def test_country_evidence_does_not_infer_city():
 
     assert candidate is not None
     assert candidate.location == "USA"
+
+
+def test_washington_dc_metro_suburb_is_reported_without_claiming_dc_city():
+    adapter = XAdapter()
+    candidate = adapter.extract_candidate(
+        title="Rich Daniel",
+        snippet="Silver Spring, Maryland. D.C. Divas Football. A true fan of the game.",
+        url="https://x.com/richdaniel",
+        intent=football_intent()
+    )
+
+    assert candidate is not None
+    assert candidate.location == "Silver Spring, Maryland (Washington DC metro area)"
