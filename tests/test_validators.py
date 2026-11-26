@@ -78,6 +78,13 @@ def test_profile_url_validation():
     assert is_valid_platform_profile_url("Threads", "https://www.threads.net/@garyvee") is True
     assert is_valid_platform_profile_url("Threads", "https://threads.net/login") is False
 
+    # Search engines often append query parameters to otherwise valid profile URLs.
+    assert is_valid_platform_profile_url("LinkedIn", "https://www.linkedin.com/in/jasonsmith?trk=public_profile") is True
+    assert is_valid_platform_profile_url("X", "https://x.com/garyvee?s=20") is True
+    assert is_valid_platform_profile_url("Instagram", "https://instagram.com/whoisjwright/?hl=en") is True
+    assert is_valid_platform_profile_url("YouTube", "https://www.youtube.com/@garyvee?si=abc123") is True
+    assert normalize_profile_url("LinkedIn", "https://www.linkedin.com/in/jasonsmith?trk=public_profile") == "https://www.linkedin.com/in/jasonsmith"
+
 
 def test_clean_tracking_params():
     url = "https://x.com/garyvee?utm_source=twitter&utm_medium=social&ref=share"
