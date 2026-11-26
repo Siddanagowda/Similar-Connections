@@ -103,8 +103,11 @@ class BasePlatformAdapter(ABC):
                 intent.location.country
                 and intent.location.country.lower() in candidate_text
             )
-            if loc_str and (city_match or country_match):
+            if city_match and loc_str:
                 detected_location = loc_str
+            elif country_match:
+                # Country evidence alone does not prove the requested city.
+                detected_location = intent.location.country
 
         return RawProfileCandidate(
             platform=self.platform_name,
