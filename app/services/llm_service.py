@@ -53,26 +53,6 @@ Output:
 """
 
 
-_online_cache = {"result": None, "timestamp": 0.0}
-
-
-def is_online(ttl: float = 5.0) -> bool:
-    """Fast check with 5s cache to verify outbound connectivity before attempting remote API calls."""
-    import time
-    now = time.time()
-    if _online_cache["result"] is not None and (now - _online_cache["timestamp"] < ttl):
-        return _online_cache["result"]
-    import socket
-    try:
-        s = socket.create_connection(("8.8.8.8", 53), timeout=0.3)
-        s.close()
-        _online_cache["result"] = True
-    except Exception:
-        _online_cache["result"] = False
-    _online_cache["timestamp"] = now
-    return _online_cache["result"]
-
-
 class LLMService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
@@ -84,7 +64,10 @@ class LLMService:
         Parses raw natural-language query into structured QueryIntent.
         Uses Gemini if online and configured, otherwise falls back to deterministic heuristic parsing.
         """
-        if self._gemini_configured and is_online():
+        if self._gemini_configured:
+            # Attempt the configured HTTPS API directly. A TCP/53 probe to a
+            # public DNS server is not a reliable indicator of HTTPS egress
+            # from managed hosting platforms.
             try:
                 intent = await self._call_gemini_query_intent(query)
                 if intent:
