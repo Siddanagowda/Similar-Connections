@@ -62,7 +62,7 @@ class LLMService:
     async def extract_query_intent(self, query: str) -> QueryIntent:
         """
         Parses raw natural-language query into structured QueryIntent.
-        Uses Gemini if online and configured, otherwise falls back to deterministic heuristic parsing.
+        Attempts Gemini when configured, otherwise falls back to deterministic heuristic parsing.
         """
         if self._gemini_configured:
             # Attempt the configured HTTPS API directly. A TCP/53 probe to a
