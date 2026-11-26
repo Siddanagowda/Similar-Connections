@@ -36,6 +36,13 @@ class ProspectService:
 
         # 3. Prospect Relevance Evaluation & Filtering
         filtered_candidates = relevance_service.filter_and_rank_candidates(raw_candidates, intent)
+        logger.info(
+            "Relevance stage for '%s': raw_candidates=%d, accepted_candidates=%d, threshold=%.2f",
+            raw_query,
+            len(raw_candidates),
+            len(filtered_candidates),
+            relevance_service.threshold
+        )
 
         # 4. Duplicate Detection & Cross-Platform Profile Consolidation
         consolidated_prospects = deduplication_service.consolidate_candidates(filtered_candidates)
